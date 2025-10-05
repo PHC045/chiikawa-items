@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>生成 index_SINGLE.html（含 Excel 名稱/分類/價格）</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--ring:#e5e7eb}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,PingFang TC,Microsoft JhengHei,sans-serif;margin:0;background:var(--bg);color:#111}
+main{max-width:980px;margin:32px auto;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--ring);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+h1{font-size:20px;margin:0 0 12px}
+.row{display:grid;gap:12px;grid-template-columns:1fr}
+label{font-weight:600}
+input[type="file"]{display:block;width:100%;padding:10px;border:1px solid var(--ring);border-radius:10px;background:#fff}
+button{padding:10px 14px;border:1px solid var(--ring);border-radius:10px;background:#fff;cursor:pointer}
+.badge{display:inline-block;border:1px solid var(--ring);border-radius:999px;padding:2px 8px;font-size:12px}
+.small{color:#666}
+hr{border:none;border-top:1px solid var(--ring);margin:16px 0}
+@media (min-width:720px){ .row{grid-template-columns:1fr 1fr} }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>生成 <code>index_SINGLE.html</code>（含 Excel 名稱/分類/價格）</h1>
+    <ol>
+      <li>Excel 另存新檔 → <b>CSV UTF-8</b>（或 <b>TSV</b>）。欄位包含：圖片檔名、商品名稱、價格、分類（最後兩者可空白）。</li>
+      <li>先選 CSV/TSV，再選 <b>assets/img</b> 圖片（可多選）。</li>
+      <li>按「下載 index_SINGLE.html」，存到與 <code>assets</code> 同層。</li>
+    </ol>
+    <div class="row">
+      <div>
+        <label>① 選擇 Excel 匯出的 CSV/TSV：</label>
+        <input id="csv" type="file" accept=".csv,.tsv,.txt"/>
+        <div id="csvInfo" class="small">尚未載入資料</div>
+      </div>
+      <div>
+        <label>② 選擇圖片（可多選）：</label>
+        <input id="picker" type="file" multiple accept=".png,.jpg,.jpeg,.webp,.gif,.bmp"/>
+        <div id="imgInfo" class="small">尚未選擇圖片</div>
+      </div>
+    </div>
+    <hr/>
+    <button id="download">⬇ 下載 index_SINGLE.html</button>
+    <span id="status" class="badge" style="margin-left:8px;display:none"></span>
+    <p class="small">價格顯示單位固定為 MOP；空白價格會顯示「待定（MOP）」。檔名比對不分大小寫。</p>
+  </div>
+</main>
+
+<script>
+let MAP = new Map(); // filename(小寫) -> {name, price, category}
+let FILES = [];      // 選到的圖片 File[]
+
+function norm(s){ return (s||'').toString().trim(); }
+function lc(s){ return norm(s).toLowerCase(); }
+function base(fn){ return lc(fn); } // 直接用完整檔名（含副檔名）比對
+
+// 簡易 CSV/TSV 解析（支援逗號或跳格、簡單引號）
+function parseTable(text){
+  const delim = text.includes('\t') ? '\t' : ',';
+  const lines = text.replace(/\r\n?/g,'\n').split('\n').filter(x=>x.trim().length);
+  const rows = [];
+  for(const line of lines){
+    const out=[]; let cur='', q=false;
+    for(let i=0;i<line.length;i++){
+      const c=line[i];
+      if(c==='\"'){ if(q && line[i+1]==='\"'){ cur+='\"'; i++; } else { q=!q; } }
+      else if(!q && c===delim){ out.push(cur); cur=''; }
+      else { cur+=c; }
+    }
+    out.push(cur);
+    rows.push(out);
+  }
+  return rows;
+}
+function findColIdx(headers, names){
+  const idx = headers.findIndex(h => names.some(n=> lc(h)===lc(n)));
+  return idx;
+}
+
+document.getElementById('csv').addEventListener('change', async (e)=>{
+  MAP.clear();
+  const f = e.target.files?.[0];
+  if(!f){ document.getElementById('csvInfo').textContent='未選擇檔案'; return; }
+
+  const txt = await f.text();
+  const rows = parseTable(txt);
+  if(rows.length===0){ document.getElementById('csvInfo').textContent='讀不到資料'; return; }
+
+  const header = rows[0].map(x=>x.trim());
+  const iFile = findColIdx(header, ['圖片檔名','圖片','檔名','image','filename']);
+  const iName = findColIdx(header, ['商品名稱','品項','名稱','name','title']);
+  const iPrice= findColIdx(header, ['價格','price']);
+  const iCat  = findColIdx(header, ['分類','category','類別']);
+
+  let ok=0;
+  for(let r=1;r<rows.length;r++){
+    const row = rows[r];
+    const fn = iFile>=0 ? row[iFile] : '';
+    if(!fn) continue;
+    const key = base(fn);
+    MAP.set(key, {
+      name: iName>=0 ? norm(row[iName]) : '',
+      price: iPrice>=0 ? norm(row[iPrice]) : '',
+      category: iCat>=0 ? norm(row[iCat]) : ''
+    });
+    ok++;
+  }
+  document.getElementById('csvInfo').textContent = `已載入 ${ok} 筆（含檔名對應、名稱/價格/分類）`;
+});
+
+document.getElementById('picker').addEventListener('change', (e)=>{
+  FILES = Array.from(e.target.files||[]).filter(f=>/\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name));
+  document.getElementById('imgInfo').textContent = `已選擇 ${FILES.length} 張圖`;
+});
+
+document.getElementById('download').addEventListener('click', ()=>{
+  const products = FILES.map(f=>{
+    const key = base(f.name);
+    const m = MAP.get(key) || {};
+    const niceName =
+      m.name ? m.name :
+      f.name.replace(/\.[a-z0-9]+$/i,'').replace(/[_\-]+/g,' ').trim() || '名稱待補';
+
+    const hasPrice = (m.price!==undefined && m.price!==null && String(m.price).trim()!=='');
+    return {
+      name: niceName,
+      price: hasPrice ? Number(m.price) : null, // 空白 -> null
+      currency: 'MOP',
+      category: m.category || '未分類',
+      image: 'assets/img/' + f.name,
+      note: ''
+    };
+  });
+
+  const html = TEMPLATE(JSON.stringify(products));
+  const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'index_SINGLE.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
+
+  const st = document.getElementById('status');
+  st.style.display='inline-block';
+  st.textContent='✅ 已下載 index_SINGLE.html';
+});
+
+// -------------------- 單檔頁樣板 --------------------
+const TEMPLATE = (json)=>`<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>商品一覽（含 Excel 資料）</title>
+<style>
+:root{--bg:#fff;--text:#111;--muted:#666;--card:#f6f7f8;--ring:#e5e7eb}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,PingFang TC,Microsoft JhengHei,sans-serif;background:var(--bg);color:var(--text)}
+.site-header{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--ring);padding:10px 16px;z-index:10}
+.brand{display:flex;gap:10px;align-items:center}.brand h1{margin:0;font-size:18px}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.search,select{padding:8px 10px;border:1px solid var(--ring);border-radius:10px;background:transparent;color:inherit}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));padding:12px}
+.card{border:1px solid var(--ring);border-radius:14px;background:var(--card);display:flex;flex-direction:column;overflow:hidden}
+.img-wrap{aspect-ratio:1/1;background:#e5e7eb}
+.card-img{width:100%;height:100%;object-fit:cover}
+.card-body{padding:10px;display:flex;flex-direction:column;gap:6px}
+.card-title{margin:0;font-size:16px}
+.card-note{margin:0;color:var(--muted);font-size:12px;min-height:1.2em}
+.card-meta{margin-top:auto;display:flex;justify-content:space-between;align-items:center}
+.price{font-weight:bold}
+.site-footer{padding:20px 16px;text-align:center;color:var(--muted)}
+</style></head><body>
+<header class="site-header">
+  <div class="brand"><span>🛍️</span><h1>商品一覽</h1></div>
+  <p style="font-size:13px;color:#666;margin:4px 0;">價格單位：MOP；空白價格顯示「待定」。</p>
+  <nav class="toolbar">
+    <input id="q" class="search" type="search" placeholder="搜尋商品…"/>
+    <select id="category"></select>
+    <select id="sort"><option value="created_desc">最新</option><option value="name_asc">名稱 A→Z</option></select>
+  </nav>
+</header>
+<main>
+  <section id="grid" class="grid" aria-live="polite"></section>
+  <template id="cardTpl">
+    <article class="card">
+      <div class="img-wrap"><img class="card-img" alt="" loading="lazy"/></div>
+      <div class="card-body">
+        <h3 class="card-title"></h3>
+        <p class="card-note"></p>
+        <div class="card-meta"><span class="price"></span><span class="badge"></span></div>
+      </div>
+    </article>
+  </template>
+</main>
+<footer class="site-footer"><small>© <span id="year"></span> 我的商店</small></footer>
+<script>document.getElementById('year').textContent=new Date().getFullYear();</script>
+<script>
+const PRODUCTS = ${json};
+function initFilters(items){
+  const cats = Array.from(new Set(items.map(i=>i.category||'未分類'))).sort();
+  const sel = document.getElementById('category');
+  sel.innerHTML = '<option value=\"\">全部</option>' + cats.map(c=>\`<option value="\${c}">\${c}</option>\`).join('');
+}
+function formatPrice(p){ return (p===null||p==='') ? '待定（MOP）' : ('MOP ' + Number(p).toFixed(2)); }
+function render(){
+  const grid=document.getElementById('grid');
+  const q=(document.getElementById('q').value||'').toLowerCase();
+  const cat=document.getElementById('category').value||'';
+  const sort=document.getElementById('sort').value||'created_desc';
+  let list=PRODUCTS.slice();
+  if(q) list=list.filter(p=>[p.name,p.note,(p.category||'')].join(' ').toLowerCase().includes(q));
+  if(cat) list=list.filter(p=>(p.category||'未分類')===cat);
+  list.sort((a,b)=> sort==='name_asc' ? (a.name||'').localeCompare(b.name||'') : 0);
+  grid.innerHTML=''; const tpl=document.getElementById('cardTpl');
+  list.forEach(p=>{
+    const n=tpl.content.cloneNode(true);
+    const img=n.querySelector('.card-img'); img.src=p.image; img.alt=p.name||'商品';
+    n.querySelector('.card-title').textContent=p.name||'名稱待補';
+    n.querySelector('.card-note').textContent=p.category||'未分類';
+    n.querySelector('.price').textContent=formatPrice(p.price);
+    grid.appendChild(n);
+  });
+}
+window.addEventListener('DOMContentLoaded', ()=>{
+  initFilters(PRODUCTS); render();
+  ['input','change'].forEach(ev=>['q','category','sort'].forEach(id=>document.getElementById(id).addEventListener(ev,render)));
+});
+</script></body></html>`;
+</script>
+</body>
+</html>

@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>商品一覽（可編輯）</title>
+<style>
+  :root{--w:1180px;--gap:12px}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans TC","Helvetica Neue",Arial;line-height:1.55;margin:0;background:#fafafa;color:#111}
+  .wrap{max-width:var(--w);margin:0 auto;padding:18px}
+  h2{margin:0 0 10px}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 16px}
+  .toolbar select,.toolbar input[type="text"],.toolbar button,.toolbar label{padding:8px;border:1px solid #ccc;border-radius:8px;background:#fff}
+  .toolbar button{cursor:pointer;background:#111;color:#fff;border:0}
+  .toolbar .muted{color:#666;border-color:#e5e5e5;background:#f9f9f9}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:var(--gap)}
+  .card{background:#fff;border:1px solid #eee;border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+  .card img{width:100%;height:220px;object-fit:cover;background:#f2f2f2}
+  .body{padding:12px}
+  .cat{font-size:12px;color:#777}
+  .title{font-weight:700;margin:6px 0 4px}
+  .price{color:#d24;font-weight:700}
+  .meta{font-size:12px;color:#999;margin-top:6px}
+  /* 編輯態 */
+  .edit-on .editable{outline:2px dashed #8bc34a;border-radius:6px;padding:2px 4px}
+  .edit-on .editable:focus{outline:2px solid #4caf50;background:#f6fff6}
+  .pill{display:inline-flex;gap:6px;align-items:center;padding:6px 10px;border:1px solid #ddd;border-radius:999px;background:#fff;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2>商品一覽 <small style="color:#666">價格單位：MOP；空白顯示「待定」。</small></h2>
+
+  <!-- 上排工具列（分類放最前） -->
+  <div class="toolbar" id="topbar">
+    <label class="pill">分類
+      <select id="catSel"><option value="">全部</option></select>
+    </label>
+
+    <input id="kw" type="text" placeholder="搜尋商品、檔名…" style="flex:1;min-width:220px">
+
+    <label class="pill">排序
+      <select id="sortSel">
+        <option value="new">最新上架</option>
+        <option value="priceLow">價錢 ↑</option>
+        <option value="priceHigh">價錢 ↓</option>
+      </select>
+    </label>
+
+    <!-- 編輯相關 -->
+    <label class="pill">
+      <input type="checkbox" id="editToggle"> 編輯模式
+    </label>
+    <label class="pill">
+      匯入 CSV <input id="csvIn" type="file" accept=".csv" style="width:200px">
+    </label>
+    <button id="exportCsvBtn" title="下載目前畫面資料為 CSV">匯出 CSV</button>
+    <button id="exportJsonBtn" class="muted" title="下載目前畫面資料為 JSON（備份用）">下載 JSON</button>
+  </div>
+
+  <div id="grid" class="grid"></div>
+</div>
+
+<!-- 內嵌資料：上線時也可以改為外部 products.json -->
+<script id="data" type="application/json">[]</script>
+
+<script>
+/* ========= 工具：CSV 解析 / 轉出 ========= */
+function parseCSV(text){
+  const rows=[], cur=[]; let cell='', q=false, i=0;
+  const pushCell=()=>{cur.push(cell);cell=''}; const pushRow=()=>{rows.push(cur.slice());cur.length=0};
+  while(i<text.length){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){cell+='"';i+=2;continue} q=false; i++; continue }
+      cell+=c; i++; continue
+    }else{
+      if(c==='"'){ q=true;i++;continue }
+      if(c===','){ pushCell(); i++; continue }
+      if(c==='\r'){ i++; continue }
+      if(c==='\n'){ pushCell(); pushRow(); i++; continue }
+      cell+=c; i++; continue
+    }
+  }
+  if(cell!==''||cur.length){ pushCell(); pushRow() }
+  return rows
+}
+function toCSV(arr){
+  const esc = s => {
+    s = (s??'').toString();
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s
+  };
+  const header = ['category','image','name','price'];
+  const lines = [header.join(',')];
+  arr.forEach(o=>{
+    lines.push([o.category||'',o.image||'',o.name||'',o.price||''].map(esc).join(','))
+  });
+  return lines.join('\n')
+}
+
+/* ========= 價格文字 ========= */
+function priceText(p){
+  if(p==null || p==='') return '待定（MOP）';
+  const n = Number(p);
+  return Number.isFinite(n) ? 'MOP '+n.toFixed(2) : '待定（MOP）';
+}
+
+/* ========= 狀態 ========= */
+let DATA = [];             // 全部商品
+let EDIT_MODE = false;     // 編輯開關
+
+/* ========= UI 渲染 ========= */
+function render(list){
+  const g = document.getElementById('grid');
+  g.innerHTML = '';
+  list.forEach((x,idx)=>{
+    const card = document.createElement('div');
+    card.className='card';
+
+    const img = document.createElement('img');
+    img.src = 'assets/img/'+x.image;
+    img.alt = x.name || '商品';
+    img.onerror = ()=>{ img.style.objectFit='contain'; img.style.background='#fff'; };
+
+    const body = document.createElement('div'); body.className='body';
+    const cat = document.createElement('div'); cat.className='cat'; cat.textContent = x.category||'未分類';
+
+    // 名稱（可編輯）
+    const title = document.createElement('div'); title.className='title editable'; title.tabIndex=0;
+    title.textContent = x.name||'（未命名）';
+    title.dataset.idx = idx; title.dataset.field='name';
+
+    // 價格（可編輯）
+    const price = document.createElement('div'); price.className='price editable'; price.tabIndex=0;
+    price.textContent = priceText(x.price);
+    price.dataset.idx = idx; price.dataset.field='price';
+    price.dataset.raw = x.price ?? '';
+
+    const meta = document.createElement('div'); meta.className='meta';
+    meta.textContent = x.image;
+
+    body.append(cat,title,price,meta);
+    card.append(img,body);
+    g.appendChild(card);
+  });
+
+  // 套用編輯外觀
+  document.body.classList.toggle('edit-on', EDIT_MODE);
+
+  // 綁定編輯事件
+  if(EDIT_MODE){
+    g.querySelectorAll('.editable').forEach(el=>{
+      const field = el.dataset.field;
+      if(field==='name'){
+        el.contentEditable = 'true';
+        el.onblur = e=>{
+          const i = +el.dataset.idx;
+          DATA[i].name = el.textContent.trim();
+        };
+      }else if(field==='price'){
+        // 價格用 prompt 比較直覺（避免 contenteditable 變成文字格式）
+        el.onclick = ()=>{
+          const i = +el.dataset.idx;
+          const oldv = DATA[i].price ?? '';
+          const v = prompt('輸入價格（空白=待定；只需輸入數字）', oldv);
+          if(v===null) return;
+          const clean = String(v).trim();
+          DATA[i].price = clean==='' ? '' : Number(clean)||'';
+          el.textContent = priceText(DATA[i].price);
+        };
+      }
+    });
+  }
+}
+
+/* ========= 過濾 / 排序 ========= */
+function uniq(a){ return [...new Set(a)] }
+function applyFilter(){
+  const kw = document.getElementById('kw').value.trim();
+  const cat= document.getElementById('catSel').value;
+  const sort= document.getElementById('sortSel').value;
+
+  let list = DATA.slice();
+  if(cat) list = list.filter(x=> (x.category||'')===cat);
+  if(kw) list = list.filter(x=> (x.name||'').includes(kw) || (x.image||'').includes(kw));
+
+  if(sort==='priceLow') list.sort((a,b)=>(+a.price||1e15)-(+b.price||1e15));
+  if(sort==='priceHigh') list.sort((a,b)=>(+b.price||-1e15)-(+a.price||-1e15));
+  // 最新上架就維持原順序
+
+  render(list);
+}
+
+/* ========= 初始化 ========= */
+function initUI(){
+  // 編輯開關
+  document.getElementById('editToggle').addEventListener('change',e=>{
+    EDIT_MODE = e.target.checked;
+    applyFilter();
+  });
+
+  // 搜尋 / 分類 / 排序
+  document.getElementById('kw').addEventListener('input',applyFilter);
+  document.getElementById('catSel').addEventListener('change',applyFilter);
+  document.getElementById('sortSel').addEventListener('change',applyFilter);
+
+  // 匯入 CSV
+  document.getElementById('csvIn').addEventListener('change',e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const fr=new FileReader();
+    fr.onload=()=>{
+      try{
+        const rows = parseCSV(fr.result);
+        if(!rows.length) return alert('CSV 為空');
+        const head = rows[0].map(s=>s.trim());
+        const idx  = {category:head.indexOf('category'), image:head.indexOf('image'), name:head.indexOf('name'), price:head.indexOf('price')};
+        if(Object.values(idx).some(i=>i<0)) return alert('欄位需含：category,image,name,price');
+
+        DATA = rows.slice(1).filter(r=>r.length).map(r=>({
+          category:(r[idx.category]||'').trim(),
+          image:(r[idx.image]||'').trim(),
+          name:(r[idx.name]||'').trim(),
+          price:(r[idx.price]||'').trim()
+        }));
+        rebuildCats();
+        applyFilter();
+        alert('已套用 CSV 到頁面（尚未儲存，請用「匯出 CSV」下載再回存 GitHub）');
+      }catch(err){ console.error(err); alert('解析 CSV 失敗：'+err.message) }
+    };
+    fr.readAsText(f,'utf-8');
+  });
+
+  // 匯出 CSV
+  document.getElementById('exportCsvBtn').addEventListener('click',()=>{
+    const csv = toCSV(DATA);
+    const blob = new Blob([csv],{type:'text/csv;charset=utf-8'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'products.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  // 匯出 JSON（備份）
+  document.getElementById('exportJsonBtn').addEventListener('click',()=>{
+    const blob = new Blob([JSON.stringify(DATA,null,2)],{type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'products.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+}
+function rebuildCats(){
+  const sel = document.getElementById('catSel');
+  sel.innerHTML = '<option value="">全部</option>';
+  uniq(DATA.map(x=>x.category||'未分類')).forEach(c=>{
+    const o=document.createElement('option');
+    o.value = (c==='未分類')?'':c; o.textContent=c; sel.appendChild(o);
+  });
+}
+
+// 從內嵌 JSON 載入（若要改成外部檔案，改這裡 fetch products.json 即可）
+(function bootstrap(){
+  try{
+    const raw = document.getElementById('data').textContent.trim();
+    DATA = raw ? JSON.parse(raw) : [];
+  }catch{ DATA = [] }
+  initUI();
+  rebuildCats();
+  applyFilter();
+})();
+</script>
+</body>
+</html>

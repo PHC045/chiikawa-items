@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>生成 index_SINGLE.html（分類在最上方）</title>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans TC","Helvetica Neue",Arial;line-height:1.6;padding:24px}
+h1{font-size:20px;margin:0 0 12px}
+.box{border:1px solid #ddd;border-radius:8px;padding:16px;margin:14px 0}
+button{padding:10px 14px;border:0;border-radius:6px;background:#111;color:#fff;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+small{color:#666}
+</style>
+</head>
+<body>
+<h1>生成 index_SINGLE.html（固定：第1欄=分類、第2欄=圖片檔名、第3欄=商品名稱、第4欄=價格）</h1>
+
+<div class="box">
+  <div>1) Excel 另存 <b>CSV UTF-8（逗號分隔）</b>；標題列需為：<code>category,image,name,price</code></div>
+  <div>2) 圖片放在 <code>assets/img/</code>；不需上傳。</div>
+  <div>3) 按「下載」即可產生 <code>index_SINGLE.html</code>（分類選單在最上方）。</div>
+</div>
+
+<div class="box">
+  <b>① 選 CSV：</b><br>
+  <input id="csv" type="file" accept=".csv"><br><br>
+  <button id="go" disabled>⬇︎ 下載 index_SINGLE.html</button>
+</div>
+
+<script>
+function parseCSV(t){
+  const rows=[], lines=t.split(/\r?\n/);
+  for(const line of lines){
+    if(!line.trim()) continue;
+    const cells=line.match(/(".*?"|[^,]+)/g)?.map(s=>s.replace(/^"|"$/g,''));
+    if(cells) rows.push(cells);
+  }
+  return rows;
+}
+
+function buildHTML(products){
+  const json = JSON.stringify(products).replace(/<\/script/gi,'<\\/script');
+
+  const head = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>商品一覽</title>
+<style>
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans TC","Helvetica Neue",Arial;margin:0;background:#fafafa}
+.topbar{background:#fff;position:sticky;top:0;z-index:10;box-shadow:0 2px 4px rgba(0,0,0,.1);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+input,select{padding:6px 10px;border:1px solid #ccc;border-radius:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;padding:16px}
+.card{background:#fff;border:1px solid #eee;border-radius:10px;overflow:hidden;display:flex;flex-direction:column}
+.card img{width:100%;height:220px;object-fit:cover;background:#f2f2f2}
+.card .body{padding:10px}
+.cat{font-size:12px;color:#777}
+.title{font-weight:700;margin:6px 0}
+.price{color:#d24;font-weight:700}
+.meta{font-size:12px;color:#999}
+</style></head><body>
+
+<div class="topbar">
+  <select id="cat"><option value="">全部分類</option></select>
+  <input id="kw" placeholder="搜尋商品…">
+  <select id="sort">
+    <option value="new">最新上架</option>
+    <option value="priceLow">價錢↑</option>
+    <option value="priceHigh">價錢↓</option>
+  </select>
+</div>
+
+<div id="grid" class="grid"></div>
+<script id="data" type="application/json">`;
+
+  const tail = `<\/script>
+<script>
+const DATA=JSON.parse(document.getElementById('data').textContent);
+function priceText(p){if(!p)return'待定（MOP）';const n=+p;return isNaN(n)?'待定（MOP）':'MOP '+n.toFixed(2);}
+function render(list){const g=document.getElementById('grid');g.innerHTML='';list.forEach(x=>{const c=document.createElement('div');c.className='card';
+const i=document.createElement('img');i.src='assets/img/'+x.image;i.alt=x.name||'商品';i.onerror=()=>{i.style.objectFit='contain';i.style.background='#fff';};
+const b=document.createElement('div');b.className='body';
+b.innerHTML='<div class="cat">'+(x.category||'未分類')+'</div><div class="title">'+(x.name||'（未命名）')+'</div><div class="price">'+priceText(x.price)+'</div><div class="meta">'+x.image+'</div>';
+c.append(i,b);g.append(c);});}
+function uniq(a){return[...new Set(a)];}
+function apply(){const kw=document.getElementById('kw').value.trim();const cat=document.getElementById('cat').value;const s=document.getElementById('sort').value;
+let l=DATA.slice();if(cat)l=l.filter(x=>x.category===cat);if(kw)l=l.filter(x=>(x.name||'').includes(kw)||(x.image||'').includes(kw));
+if(s==='priceLow')l.sort((a,b)=>(+a.price||1e9)-(+b.price||1e9));if(s==='priceHigh')l.sort((a,b)=>(+b.price||-1e9)-(+a.price||-1e9));render(l);}
+(function init(){const cats=uniq(DATA.map(x=>x.category||'未分類'));const sel=document.getElementById('cat');
+cats.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.append(o);});
+document.getElementById('kw').addEventListener('input',apply);
+document.getElementById('cat').addEventListener('change',apply);
+document.getElementById('sort').addEventListener('change',apply);
+apply();})();
+<\/script></body></html>`;
+
+  const blob=new Blob([head+json+tail],{type:'text/html;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='index_SINGLE.html'; a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+const csvInput=document.getElementById('csv'), goBtn=document.getElementById('go');
+csvInput.addEventListener('change',e=>{ goBtn.disabled=!e.target.files.length; });
+goBtn.addEventListener('click',()=>{
+  const f=csvInput.files[0]; if(!f) return alert('請先選 CSV');
+  const fr=new FileReader();
+  fr.onload=()=>{
+    try{
+      const rows=parseCSV(fr.result); if(!rows.length) return alert('CSV 為空');
+      const head=rows[0].map(s=>s.trim());
+      const idx={category:head.indexOf('category'),image:head.indexOf('image'),name:head.indexOf('name'),price:head.indexOf('price')};
+      if(Object.values(idx).some(i=>i<0)) return alert('標題需含 category,image,name,price');
+      const products=rows.slice(1).filter(r=>r.length).map(r=>({category:r[idx.category],image:r[idx.image],name:r[idx.name],price:r[idx.price]}));
+      buildHTML(products);
+    }catch(e){ alert('解析錯誤：'+e.message); }
+  };
+  fr.readAsText(f,'utf-8');
+});
+</script>
+</body>
+</html>
