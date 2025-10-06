@@ -44,13 +44,17 @@ const DATA=JSON.parse(document.getElementById('data').textContent);
 function priceText(p){if(!p)return'待定（MOP）';const n=+p;return isNaN(n)?'待定（MOP）':'MOP '+n.toFixed(2);}
 function render(list){const g=document.getElementById('grid');g.innerHTML='';list.forEach(x=>{const c=document.createElement('div');c.className='card';
 const i = document.createElement('img');
-i.setAttribute('data-src', x.image); // 延遲載入使用 data-src
-i.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBA=='; // 透明佔位符
+const i = document.createElement('img');
+
+// ✅ 呼叫 lazy loader（這行會自動設定 data-src 與觀察）
+prepareLazy(i, x.image);
+
 i.alt = x.name || '商品';
 i.onerror = () => {
   i.style.objectFit = 'contain';
   i.style.background = '#fff';
 };
+
 
 const b = document.createElement('div');
 b.className = 'body';
@@ -121,6 +125,37 @@ function prepareLazy(imgEl, fileName) {
 }
 </script>
 
+<script>
+/* ---- Lazy Loader（穩定版） ---- */
+const PIXEL =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
+const USE_CDN = false;  // 若你想走 jsDelivr，再改成 true
+const imgURL = (file) =>
+  USE_CDN
+    ? `https://cdn.jsdelivr.net/gh/<你的帳號>/<你的repo>@main/assets/img/${file}`
+    : `assets/img/${file}`;
+
+const imgObserver = new IntersectionObserver((entries, ob) => {
+  entries.forEach((e) => {
+    if (!e.isIntersecting) return;
+    const img = e.target;
+    const real = img.getAttribute('data-src');
+    if (real) {
+      img.src = real;              // 真正開始載入
+      img.removeAttribute('data-src');
+    }
+    ob.unobserve(img);
+  });
+}, { rootMargin: '600px 0px', threshold: 0.01 });
+
+function prepareLazy(imgEl, fileName) {
+  imgEl.loading = 'lazy';
+  imgEl.decoding = 'async';
+  imgEl.src = PIXEL;                          // 先放 1×1 佔位
+  imgEl.setAttribute('data-src', imgURL(fileName)); // 真正網址放 data-src
+  imgObserver.observe(imgEl);
+}
+</script>
 
 
 </body></html>
