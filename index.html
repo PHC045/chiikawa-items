@@ -33,7 +33,13 @@ function priceText(p){if(!p)return'待定（MOP）';const n=+p;return isNaN(n)?'
 function render(list){const g=document.getElementById('grid');g.innerHTML='';list.forEach(x=>{const c=document.createElement('div');c.className='card';
 const i=document.createElement('img');i.src='assets/img/'+x.image;i.alt=x.name||'商品';i.onerror=()=>{i.style.objectFit='contain';i.style.background='#fff';};
 const b=document.createElement('div');b.className='body';
-b.innerHTML='<div class="cat">'+(x.category||'未分類')+'</div><div class="title">'+(x.name||'（未命名）')+'</div><div class="price">'+priceText(x.price)+'</div><div class="meta">'+x.image+'</div>';
+
+b.innerHTML =
+  '<div class="cat">' + (x.category || '未分類') + '</div>' +
+  '<div class="title">' + (x.name || '（未命名）') + '</div>' +
+  '<div class="price">' + priceText(x.price) + '</div>';
+
+
 c.append(i,b);g.append(c);});}
 function uniq(a){return[...new Set(a)];}
 function apply(){const kw=document.getElementById('kw').value.trim();const cat=document.getElementById('cat').value;const s=document.getElementById('sort').value;
