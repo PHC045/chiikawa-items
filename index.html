@@ -31,8 +31,18 @@ input,select{padding:6px 10px;border:1px solid #ccc;border-radius:6px}
 const DATA=JSON.parse(document.getElementById('data').textContent);
 function priceText(p){if(!p)return'待定（MOP）';const n=+p;return isNaN(n)?'待定（MOP）':'MOP '+n.toFixed(2);}
 function render(list){const g=document.getElementById('grid');g.innerHTML='';list.forEach(x=>{const c=document.createElement('div');c.className='card';
-const i=document.createElement('img');i.src='assets/img/'+x.image;i.alt=x.name||'商品';i.onerror=()=>{i.style.objectFit='contain';i.style.background='#fff';};
-const b=document.createElement('div');b.className='body';
+const i = document.createElement('img');
+i.setAttribute('data-src', x.image); // 延遲載入使用 data-src
+i.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBA=='; // 透明佔位符
+i.alt = x.name || '商品';
+i.onerror = () => {
+  i.style.objectFit = 'contain';
+  i.style.background = '#fff';
+};
+
+const b = document.createElement('div');
+b.className = 'body';
+
 
 b.innerHTML =
   '<div class="cat">' + (x.category || '未分類') + '</div>' +
@@ -51,4 +61,50 @@ document.getElementById('kw').addEventListener('input',apply);
 document.getElementById('cat').addEventListener('change',apply);
 document.getElementById('sort').addEventListener('change',apply);
 apply();})();
-</script></body></html>
+</script>
+
+
+
+
+<script>
+/* === lazy loading + GitHub CDN 加速設定 === */
+
+/* 預設 GIF 佔位符 */
+const PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBA==";
+
+/* 如果要用 GitHub CDN 加速 */
+const USE_CDN = true;
+function imgURL(file) {
+  return USE_CDN
+    ? `https://cdn.jsdelivr.net/gh/animegoodspotato/chiikawa-items@main/assets/img/${file}`
+    : `img/${file}`;
+}
+
+/* 將 <img data-src="xxx"> 改成 src */
+function applyLazyImages(root = document) {
+  root.querySelectorAll("img[data-src]").forEach(img => {
+    img.src = PIXEL;
+    observer.observe(img);
+  });
+}
+
+/* IntersectionObserver：滑到圖片時才真正載入 */
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const img = entry.target;
+      const real = img.getAttribute("data-src");
+      if (real) img.src = imgURL(real);
+      img.removeAttribute("data-src");
+      observer.unobserve(img);
+    }
+  });
+});
+
+/* 初始化：延遲載入所有圖片 */
+document.addEventListener("DOMContentLoaded", () => {
+  applyLazyImages();
+});
+</script>
+
+</body></html>
