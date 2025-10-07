@@ -97,6 +97,8 @@ input,select{padding:8px 10px;border:1px solid var(--ring);border-radius:8px;bac
   </div>
 </aside>
 
+
+
 <script>
 /* =========================
    1) 產品資料來源
@@ -123,7 +125,7 @@ const sortSel = $('#sort');
 const grid = $('#grid');
 
 function uniq(list){ return [...new Set(list)]; }
-function priceText(n){ return isNaN(n)? 'MOP 0.00' : 'MOP '+Number(n).toFixed(2); }
+
 
 function initFilters(){
   // 類別
@@ -223,22 +225,33 @@ function updateBadge(){
   $('#cartCount').textContent = count;
 }
 
-/* 折扣規則：滿額取最高檔 */
+/* ---- 金額格式器 ---- */
+// 2 位小數（商品、折扣、小計）
+const priceText  = (n) => `MOP ${Number(n).toFixed(2)}`;
+// 1 位小數（合計）
+const priceText1 = (n) => `MOP ${(Math.round(Number(n) * 10) / 10).toFixed(1)}`;
+
+
+/* 折扣規則：滿額取最高檔（回傳 total 不四捨五入；只在顯示時處理） */
 function calcTotals(){
   const subtotal = cart.reduce((s,i)=>s+i.price*i.qty,0);
+
   let rate = 1, label='';
-  if(subtotal >= 500){ rate=0.80; label='滿 500 → 8折'; }
-  else if(subtotal >= 400){ rate=0.85; label='滿 400 → 85折'; }
-  else if(subtotal >= 300){ rate=0.90; label='滿 300 → 9折'; }
-  else if(subtotal >= 200){ rate=0.95; label='滿 200 → 95折'; }
-  const total = subtotal * rate;
-  const discount = subtotal - total;
-  return { subtotal, discount, total, label };
+  if (subtotal >= 500){ rate = 0.80; label = '滿 500 → 8折'; }
+  else if (subtotal >= 400){ rate = 0.85; label = '滿 400 → 85折'; }
+  else if (subtotal >= 300){ rate = 0.90; label = '滿 300 → 9折'; }
+  else if (subtotal >= 200){ rate = 0.95; label = '滿 200 → 95折'; }
+
+  const totalRaw = subtotal * rate;   // 不在這裡進位，顯示時再處理
+  const discount = subtotal - totalRaw;
+
+  return { subtotal, discount, total: totalRaw, label };
 }
 
 function renderCart(){
   const list = $('#cartList');
   list.innerHTML='';
+
   if(cart.length===0){
     list.innerHTML = `<div class="empty">購物車是空的</div>`;
   }else{
@@ -262,12 +275,16 @@ function renderCart(){
       list.appendChild(row);
     });
   }
+
   const {subtotal,discount,total,label} = calcTotals();
+
+  // 小計/折扣：2 位小數；合計：1 位小數（四捨五入）
   $('#subtotal').textContent = priceText(subtotal);
-  $('#discount').textContent = '- '+priceText(discount);
-  $('#total').textContent = priceText(total);
+  $('#discount').textContent = '- ' + priceText(discount);
+  $('#total').textContent = priceText1(total);
   $('#ruleText').textContent = label ? `（${label}）` : '';
 }
+
 
 /* 面板控制 */
 const panel = $('#cartPanel');
@@ -280,16 +297,23 @@ function closeCart(){ panel.classList.remove('open'); panel.setAttribute('aria-h
 openBtn.addEventListener('click', openCart);
 closeBtn.addEventListener('click', closeCart);
 $('#clearCart').addEventListener('click', ()=>{ if(confirm('確定清空購物車？')) clearCart(); });
+
 $('#checkout').addEventListener('click', ()=>{
   const {subtotal,discount,total,label} = calcTotals();
-  alert(`小計：${priceText(subtotal)}\n折扣：${priceText(discount)} ${label?`(${label})`:''}\n合計：${priceText(total)}\n\n（示範）此處可導向結帳頁或開啟傳訊息等流程。`);
+  alert(
+    `小計：MOP ${subtotal.toFixed(2)}\n` +
+    `折扣：MOP ${discount.toFixed(2)} ${label ? `(${label})` : ''}\n` +
+    `合計：${priceText1(total)}\n\n` +
+    `麻煩將想要嘅商品（購物車裏的圖）DM 我地 IG 帳號 @animegoodspotato`
+  );
 });
 
-/* 啟動 */
+// 啟動
 initFilters();
 apply();
 updateBadge();
 renderCart();
+
 </script>
 </body>
 </html>
