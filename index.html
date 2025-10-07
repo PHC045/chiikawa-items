@@ -44,12 +44,65 @@ input,select{padding:8px 10px;border:1px solid var(--ring);border-radius:8px;bac
 .cart-hd{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--ring)}
 .cart-bd{flex:1;overflow:auto;padding:10px 12px}
 .cart-ft{border-top:1px solid var(--ring);padding:12px 16px;display:flex;flex-direction:column;gap:10px}
-.cart-item{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:center;border:1px solid var(--ring);
-  border-radius:10px;padding:8px;margin-bottom:10px}
+.cart-item {
+  display: grid;
+  grid-template-columns: 64px 1fr auto; /* auto = 自動寬度但不超出 */
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--ring);
+  border-radius: 10px;
+  padding: 8px;
+  margin-bottom: 10px;
+}
+
+/* 右側容器（數量＋移除） */
+.cart-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end; /* 整組靠右對齊 */
+  gap: 6px;
+  justify-content: center;
+  width: 100px;          /* 固定寬，防止超出 */
+}
+
 .cart-item img{width:64px;height:64px;object-fit:contain;background:#fff;border-radius:8px}
-.cart-qty{display:inline-flex;align-items:center;border:1px solid var(--ring);border-radius:8px;overflow:hidden}
-.cart-qty button{width:28px;height:28px;border:0;background:#f7f7f7;cursor:pointer}
-.cart-qty input{width:38px;height:28px;border:0;text-align:center}
+.cart-qty {
+  display: flex;
+  flex-direction: row;       /* ← 改成水平排列 */
+  justify-content: center;
+  align-items: center;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+  width: fit-content;
+}
+
+.cart-qty button {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: #f7f7f7;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 16px;
+  color: #333;
+}
+
+.cart-qty button:hover {
+  background: #eee;
+}
+
+.cart-qty input {
+  width: 40px;
+  height: 28px;
+  border: none;
+  text-align: center;
+  font-size: 14px;
+}
+
 .row{display:flex;align-items:center;justify-content:space-between}
 .small{font-size:12px;color:var(--muted)}
 .hr{height:1px;background:var(--ring);margin:6px 0}
@@ -304,11 +357,11 @@ function renderCart(){
         <img src="${imgURL(i.image)}" alt="">
         <div>
           <div class="title">${i.name||''}</div>
-          <div class="small">${i.category||''}　${i.image||''}</div>
+          <div class="small">${i.category||''}</div>
           <div class="price" style="margin-top:4px">${priceText(i.price)}</div>
         </div>
 <div class="small">上限：${limitFor(i)} 件</div>
-        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <div class="cart-controls">
           <div class="cart-qty">
             <button aria-label="減一" onclick="updateQty('${i.id}',-1)">−</button>
             <input value="${i.qty}" onchange="setQty('${i.id}', this.value)">
